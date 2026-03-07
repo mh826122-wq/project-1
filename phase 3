@@ -1,0 +1,110 @@
+import javafx.application.Application;
+import javafx.application.Platform;
+import javafx.scene.Scene;
+import javafx.scene.control.*;
+import javafx.scene.layout.*;
+import javafx.stage.Stage;
+
+import java.io.*;
+import java.net.Socket;
+
+public class ChatApp extends Application {
+
+    private TextArea chatArea;
+    private TextField messageField;
+    private Button sendButton;
+
+    private Socket socket;
+    private BufferedReader in;
+    private PrintWriter out;
+
+    @Override
+    public void start(Stage stage) {
+
+        chatArea = new TextArea();
+        chatArea.setEditable(false);
+
+        messageField = new TextField();
+        messageField.setPromptText("Enter message...");
+
+        sendButton = new Button("Send");
+
+        HBox bottom = new HBox(10, messageField, sendButton);
+        BorderPane root = new BorderPane();
+        root.setCenter(chatArea);
+        root.setBottom(bottom);
+
+        Scene scene = new Scene(root, 500, 400);
+
+        stage.setTitle("Lehman Chat Client");
+        stage.setScene(scene);
+        stage.show();
+
+        connectToServer();
+
+        sendButton.setOnAction(e -> sendMessage());
+        messageField.setOnAction(e -> sendMessage());
+
+        stage.setOnCloseRequest(e -> {
+            try {
+                socket.close();
+            } catch (IOException ex) {}
+        });
+    }
+
+    private void connectToServer() {
+        new Thread(() -> {
+            try {
+                socket = new Socket("localhost", 59001);
+
+                in = new BufferedReader(
+                        new InputStreamReader(socket.getInputStream()));
+
+                out = new PrintWriter(
+                        socket.getOutputStream(), true);
+
+                // receive server prompt
+                String prompt = in.readLine();
+
+                Platform.runLater(() -> {
+                    TextInputDialog dialog = new TextInputDialog();
+                    dialog.setHeaderText(prompt);
+                    dialog.setTitle("Enter Name");
+                    dialog.setContentText("Name:");
+
+                    String name = dialog.showAndWait().orElse("User");
+                    out.println(name);
+                });
+
+                String line;
+
+                while ((line = in.readLine()) != null) {
+
+                    String message = line;
+
+                    Platform.runLater(() -> {
+                        chatArea.appendText(message + "\n");
+                    });
+                }
+
+            } catch (IOException e) {
+                Platform.runLater(() ->
+                        chatArea.appendText("Connection closed\n"));
+            }
+        }).start();
+    }
+
+    private void sendMessage() {
+
+        String message = messageField.getText();
+
+        if (!message.isEmpty()) {
+            out.println(message);
+            messageField.clear();
+        }
+    }
+
+    public static void main(String[] args) {
+        launch();
+    }
+}
